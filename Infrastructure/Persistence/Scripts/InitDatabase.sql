@@ -74,20 +74,6 @@ BEGIN TRY
         VALUES ('admin', '$2a$12$.jE3abV4QoCzPSpVihXsTeUWR3W1lcsN9UbeOtxouw7f7.txxlOHq', 'Admin', GETUTCDATE());
     END
 
-    -- Insert usuario votante 1 (contraseña: voter123)
-    IF NOT EXISTS (SELECT 1 FROM Users WHERE Username = 'voter1')
-    BEGIN
-        INSERT INTO Users (Username, PasswordHash, Role, CreatedAt)
-        VALUES ('voter1', '$2a$10$kI1L2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2G3H4I5J6K7L8M', 'Voter', GETUTCDATE());
-    END
-
-    -- Insert usuario votante 2 (contraseña: voter123) con hash diferente
-    IF NOT EXISTS (SELECT 1 FROM Users WHERE Username = 'voter2')
-    BEGIN
-        INSERT INTO Users (Username, PasswordHash, Role, CreatedAt)
-        VALUES ('voter2', '$2a$10$R1S2T3U4V5W6X7Y8Z9A0B1C2D3E4F5G6H7I8J9K0L1M2N3O4P5Q6R7S8T', 'Voter', GETUTCDATE());
-    END
-
     -- Si todo ha ido bien, confirmamos la transacción
     COMMIT TRANSACTION;
     PRINT 'Script ejecutado correctamente. Todas las tablas y datos han sido creados.';
