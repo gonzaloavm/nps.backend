@@ -19,27 +19,27 @@ namespace Application.Features.NPS.Handlers
         {
             var data = await _voteRepository.GetNpsStatisticsAsync();
 
+            // Evitar errores de división por cero si no hay registros
             if (data.TotalVotes == 0)
-                return Result<NpsStatisticsResponse>.Success(new NpsStatisticsResponse());
+                return Result<NpsStatisticsResponse>.Success(new NpsStatisticsResponse(0, 0, 0, 0, 0, "Sin datos"));
 
-            // Calculamos el Score
+            // Aplicar fórmula estándar: % Promotores - % Detractores
             double npsScore = ((double)(data.Promoters - data.Detractors) / data.TotalVotes) * 100;
 
-            var response = new NpsStatisticsResponse
-            {
-                TotalVotes = data.TotalVotes,
-                Promoters = data.Promoters,
-                Detractors = data.Detractors,
-                Neutrals = data.Neutrals,
-                NpsScore = Math.Round(npsScore, 2),
-                Classification = npsScore switch
+            var response = new NpsStatisticsResponse(
+                TotalVotes: data.TotalVotes,
+                Promoters: data.Promoters,
+                Detractors: data.Detractors,
+                Neutrals: data.Neutrals,
+                NpsScore: Math.Round(npsScore, 2),
+                Classification: npsScore switch
                 {
                     > 75 => "Excelente",
                     > 50 => "Muy Bueno",
                     > 0 => "Bueno",
                     _ => "Necesita Mejorar"
                 }
-            };
+            );
 
             return Result<NpsStatisticsResponse>.Success(response);
         }

@@ -24,8 +24,10 @@ namespace WebAPI.Controllers
         }
 
         [HttpPost]
-        [Authorize (Policy = "VoterOnly")]
-        [ProducesResponseType(typeof(ApiResponse<CreateVoteResponse>), StatusCodes.Status201Created)]
+        [Authorize(Policy = "VoterOnly")]
+        [Tags("Votación")]
+        [EndpointDescription("Registra la puntuación NPS del usuario autenticado. El sistema identifica al votante mediante el token JWT.")]
+        [ProducesResponseType(typeof(ApiResponse<CreateVoteResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> CreateVote([FromBody] CreateVoteRequest request, CancellationToken ct)
@@ -50,7 +52,9 @@ namespace WebAPI.Controllers
 
         [HttpGet("has-voted")]
         [Authorize(Policy = "VoterOnly")]
-        [ProducesResponseType(typeof(ApiResponse<HasVotedResponse>), StatusCodes.Status201Created)]
+        [Tags("Votación")]
+        [EndpointDescription("Consulta si el usuario autenticado ya ha realizado su votación anteriormente.")]
+        [ProducesResponseType(typeof(ApiResponse<HasVotedResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> HasVoted()

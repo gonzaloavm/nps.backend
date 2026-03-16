@@ -28,16 +28,16 @@ namespace Application.Features.Auth.Handlers
             if (user == null)
                 return Result<LoginResponse>.Failure(new Error(BusinessErrorCodes.InvalidCredentials, "Credenciales inválidas."));
 
-            // Control de Bloqueo
             if (user.IsLocked)
                 return Result<LoginResponse>.Failure(new Error(BusinessErrorCodes.AccountLocked, "Cuenta bloqueada por exceso de intentos."));
 
-            // Verificación de Password
+            // Valdiar clave
             if (!_passwordHasher.VerifyPasswordHash(command.Password, user.PasswordHash))
             {
                 user.AccessFailedCount++;
                 user.UpdateTimestamp();
 
+                // Aplicar bloqueo al superar el umbral de seguridad
                 if (user.AccessFailedCount >= 3)
                     user.IsLocked = true;
 
@@ -50,12 +50,11 @@ namespace Application.Features.Auth.Handlers
                 return Result<LoginResponse>.Failure(new Error(BusinessErrorCodes.InvalidCredentials, errorMsg));
             }
 
-            // Login Exitoso, reiniciar intentos
             user.AccessFailedCount = 0;
             user.UpdateTimestamp();
             await _userRepository.UpdateUserAsync(user);
 
-            // Crear Sesión (Dura 5 min)
+            // Persistir rastro de auditoría y origen de la sesión
             var session = new UserSession
             {
                 UserId = user.Id,
@@ -67,7 +66,7 @@ namespace Application.Features.Auth.Handlers
             };
             session.Id = await _userRepository.CreateSessionAsync(session);
 
-            // Crear Refresh Token (Dura 5 min, ligado a la sesión)
+            // Vincular token de refresco a la sesión persistida
             var refreshTokenValue = _tokenService.GenerateRefreshToken();
             var refreshToken = new RefreshToken
             {
@@ -78,10 +77,9 @@ namespace Application.Features.Auth.Handlers
             };
             await _userRepository.CreateRefreshTokenAsync(refreshToken);
 
-            // Registramos el refresh token en una cookie segura
             _tokenService.SetRefreshTokenCookie(refreshTokenValue);
 
-            // Generar Access Token (Dura 1 min)
+            // Emitir JWT con el identificador de sesión para trazabilidad
             var jwt = _tokenService.GenerateToken(user, session.Id, minutes: 5);
 
             return Result<LoginResponse>.Success(new LoginResponse(

@@ -21,17 +21,16 @@ namespace Application.Features.Auth.Handlers
 
         public async Task<Result<RegisterResponse>> Handle(RegisterCommand request, CancellationToken cancellationToken)
         {
-            // Validar que el usuario no exista
             var existingUser = await _userRepository.GetByUsernameAsync(request.Username);
+
             if (existingUser != null)
             {
-                return Result<RegisterResponse>.Failure(new Error(BusinessErrorCodes.Generic, "El nombre de usuario ya existe."));
+                // Garantizar la unicidad de la identidad del usuario
+                return Result<RegisterResponse>.Failure(new Error(BusinessErrorCodes.DuplicateResource, "El nombre de usuario ya existe."));
             }
 
-            // Hashear contraseña
             var passwordHash = _passwordHasher.HashPassword(request.Password);
 
-            // Crear nuevo usuario
             var user = new User
             {
                 Username = request.Username,
@@ -41,7 +40,7 @@ namespace Application.Features.Auth.Handlers
 
             var userId = await _userRepository.AddAsync(user);
 
-            return Result<RegisterResponse>.Success(new RegisterResponse (userId));
+            return Result<RegisterResponse>.Success(new RegisterResponse(userId));
         }
     }
 }

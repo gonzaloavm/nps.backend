@@ -23,7 +23,9 @@ namespace WebAPI.Controllers
 
         [HttpGet("nps-statistics")]
         [Authorize(Policy = "AdminOnly")]
-        [ProducesResponseType(typeof(ApiResponse<NpsStatisticsResponse>), StatusCodes.Status201Created)]
+        [Tags("Métricas")]
+        [EndpointDescription("Calcula el índice NPS actual basándose en los votos registrados, clasificándolos en Promotores, Pasivos y Detractores.")]
+        [ProducesResponseType(typeof(ApiResponse<NpsStatisticsResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetNpsStatistics(CancellationToken ct)
@@ -41,8 +43,11 @@ namespace WebAPI.Controllers
 
         [HttpGet("voters-list")]
         [Authorize(Policy = "AdminOnly")]
+        [Tags("Administración")]
+        [EndpointDescription("Obtiene la lista detallada de todos los votantes registrados y su estado de participación.")]
         [ProducesResponseType(typeof(ApiResponse<IEnumerable<VoterDto>>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetVotersList(CancellationToken ct)
         {
             var result = await _mediator.Send(new GetVoterListQuery(), ct);

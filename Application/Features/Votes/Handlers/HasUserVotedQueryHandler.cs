@@ -3,6 +3,8 @@ using Application.Features.Votes.Queries;
 using Domain.Common;
 using Domain.Repositories;
 using MediatR;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Application.Features.Votes.Handlers
 {
@@ -17,8 +19,10 @@ namespace Application.Features.Votes.Handlers
 
         public async Task<Result<HasVotedResponse>> Handle(HasUserVotedQuery request, CancellationToken cancellationToken)
         {
-            var vote = await _voteRepository.HasUserVotedAsync(request.UserId);
-            return Result<HasVotedResponse>.Success(new HasVotedResponse(vote));
+            // Consultar persistencia para determinar el estado de participación del usuario
+            var hasVoted = await _voteRepository.HasUserVotedAsync(request.UserId);
+
+            return Result<HasVotedResponse>.Success(new HasVotedResponse(hasVoted));
         }
     }
 }

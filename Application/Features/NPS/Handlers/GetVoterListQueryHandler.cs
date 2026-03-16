@@ -3,9 +3,6 @@ using Domain.Common;
 using Domain.Entities.DTOs;
 using Domain.Repositories;
 using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Application.Features.NPS.Handlers
 {
@@ -20,7 +17,9 @@ namespace Application.Features.NPS.Handlers
 
         public async Task<Result<IEnumerable<VoterDto>>> Handle(GetVoterListQuery request, CancellationToken ct)
         {
+            // Recuperar usuarios junto con su estado de participación actual
             var voters = await _userRepository.GetUsersWithVoteStatusAsync();
+
             return Result<IEnumerable<VoterDto>>.Success(voters);
         }
     }

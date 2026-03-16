@@ -25,6 +25,8 @@ namespace WebAPI.Controllers
         }
 
         [HttpPost("login")]
+        [Tags("Autenticación")]
+        [EndpointDescription("Autentica al usuario mediante credenciales y registra metadatos del dispositivo (IP, Dispositivo) y geolocalización.")]
         [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -56,6 +58,8 @@ namespace WebAPI.Controllers
 
         [HttpPost("register")]
         [Authorize(Policy = "AdminOnly")]
+        [Tags("Autenticación")]
+        [EndpointDescription("Permite a un administrador dar de alta a nuevos usuarios (Votantes o Admins).")]
         [ProducesResponseType(typeof(ApiResponse<RegisterResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -77,6 +81,8 @@ namespace WebAPI.Controllers
 
 
         [HttpPost("refresh")]
+        [Tags("Autenticación")]
+        [EndpointDescription("Extiende la validez de la sesión utilizando el Refresh Token almacenado en las cookies HttpOnly.")]
         [ProducesResponseType(typeof(ApiResponse<RefreshSessionResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -112,6 +118,8 @@ namespace WebAPI.Controllers
 
 
         [HttpPost("logout")]
+        [Tags("Autenticación")]
+        [EndpointDescription("Invalida el Refresh Token en el servidor y elimina la cookie del navegador.")]
         [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -146,6 +154,10 @@ namespace WebAPI.Controllers
         /// </summary>
         [HttpGet("verify-session")]
         [Authorize]
+        [Tags("Autenticación")]
+        [EndpointDescription("Valida si el token actual es vigente y actualiza la última actividad del usuario en el sistema.")]
+        [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> VerifySession([FromQuery] long? t = null)
         {
             // El parámetro 't' no se usa aquí, su sola presencia en la URL 

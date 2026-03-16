@@ -9,6 +9,7 @@ using Infrastructure.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using System.Data;
 using System.Reflection;
@@ -19,14 +20,25 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.Configure<RouteOptions>(options => options.LowercaseUrls = true);
 
 // OpenAPI + Scalar
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        document.Info.Title = "NPS Backend API";
+        document.Info.Version = "v1";
+        document.Info.Description = "API nativa para la gestión de encuestas NPS.";
+        document.Info.Contact = new OpenApiContact
+        {
+            Name = "Soporte Técnico",
+            Email = "dev@nps.com"
+        };
+        return Task.CompletedTask;
+    });
 
-// AutoMapper
-//builder.Services.AddAutoMapper(cfg => {
-//    cfg.AddProfile<MappingProfile>();
-//});
+});
 
 // Repositorios y servicios
 var infraAssembly = Assembly.Load("Infrastructure");
@@ -38,11 +50,13 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Login
 
 // FluentValidation
 builder.Services.AddMediatR(cfg => {
-    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
+    cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly);
+
+    // Registra el Behavior
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 });
 
-builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
+builder.Services.AddValidatorsFromAssembly(typeof(Application.AssemblyReference).Assembly);
 
 // Dapper Context
 builder.Services.AddSingleton<DapperContext>();
@@ -83,11 +97,9 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("VoterOnly", policy => policy.RequireRole("Voter"));
-});
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"))
+    .AddPolicy("VoterOnly", policy => policy.RequireRole("Voter"));
 
 #region CORS
 

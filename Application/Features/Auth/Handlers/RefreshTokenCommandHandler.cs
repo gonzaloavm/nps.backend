@@ -6,8 +6,8 @@ using Domain.Entities.UserAggregate;
 using Domain.Repositories;
 using MediatR;
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Application.Features.Auth.Handlers
 {
@@ -27,40 +27,39 @@ namespace Application.Features.Auth.Handlers
             var oldTokenValue = request.RefreshToken;
 
             if (string.IsNullOrEmpty(oldTokenValue))
-                return Result<RefreshSessionResponse>.Failure(new Error("401", "No existe el refresh token."));
+                return Result<RefreshSessionResponse>.Failure(new Error(BusinessErrorCodes.SessionExpired, "No existe el refresh token."));
 
             var (tokenRecord, session) = await _userRepository.GetTokenWithSessionAsync(oldTokenValue);
 
             if (tokenRecord == null || session == null || !session.IsActive)
-                return Result<RefreshSessionResponse>.Failure(new Error("401", "Sesión inválida o inexistente."));
+                return Result<RefreshSessionResponse>.Failure(new Error(BusinessErrorCodes.SessionExpired, "Sesión inválida o inexistente."));
 
+            // Invalidar sesión si el token ya fue utilizado o revocado previamente
             if (tokenRecord.IsUsed || tokenRecord.IsRevoked)
             {
                 session.IsActive = false;
                 session.UpdateTimestamp();
                 await _userRepository.UpdateSessionAsync(session);
-                return Result<RefreshSessionResponse>.Failure(new Error("401", "Fraude detectado, sesión revocada."));
+                return Result<RefreshSessionResponse>.Failure(new Error(BusinessErrorCodes.InvalidCredentials, "Fraude detectado, sesión revocada."));
             }
 
             if (tokenRecord.ExpiresAt < DateTime.Now)
-                return Result<RefreshSessionResponse>.Failure(new Error("401", "El refresh token ha expirado."));
+                return Result<RefreshSessionResponse>.Failure(new Error(BusinessErrorCodes.SessionExpired, "El refresh token ha expirado."));
 
-            // *** VALIDACIÓN DE INACTIVIDAD (5 minutos desde LastActivityAt) ***
+            // Verificar ventana de inactividad permitida
             if (DateTime.Now - session.LastActivityAt > TimeSpan.FromMinutes(5))
             {
-                // Marcar sesión como inactiva
                 session.IsActive = false;
                 session.UpdateTimestamp();
                 await _userRepository.UpdateSessionAsync(session);
-                return Result<RefreshSessionResponse>.Failure(new Error("401", "Sesión expirada por inactividad."));
+                return Result<RefreshSessionResponse>.Failure(new Error(BusinessErrorCodes.SecurityBreach, "Sesión expirada por inactividad."));
             }
 
-            // Actualizar LastActivityAt por la actividad del refresh
+            // Actualizar rastro de actividad tras validación exitosa
             session.LastActivityAt = DateTime.Now;
             session.UpdateTimestamp();
             await _userRepository.UpdateSessionAsync(session);
 
-            // Crear nuevo refresh token (vida 15 min)
             var newRefreshTokenValue = _tokenService.GenerateRefreshToken();
             var newRefreshToken = new RefreshToken
             {
@@ -72,21 +71,19 @@ namespace Application.Features.Auth.Handlers
             };
             var newRefreshTokenId = await _userRepository.CreateRefreshTokenAsync(newRefreshToken);
 
-            // Rotar el token viejo
+            // Rotar tokens para asegurar un único uso por ciclo
             tokenRecord.IsUsed = true;
             tokenRecord.ReplacedByTokenId = newRefreshTokenId;
             tokenRecord.UpdateTimestamp();
             await _userRepository.UpdateRefreshTokenAsync(tokenRecord);
 
-            // Establecer cookie con el nuevo refresh token
             _tokenService.SetRefreshTokenCookie(newRefreshTokenValue);
 
-            // Obtener usuario y generar nuevo access token (5 min)
             var user = await _userRepository.GetByIdAsync(session.UserId);
             if (user == null)
-                return Result<RefreshSessionResponse>.Failure(new Error("401", "Usuario no encontrado."));
+                return Result<RefreshSessionResponse>.Failure(new Error(BusinessErrorCodes.InvalidCredentials, "Usuario no encontrado."));
 
-            var jwt = _tokenService.GenerateToken(user, session.Id, minutes: 5); // <-- Pasar sessionId
+            var jwt = _tokenService.GenerateToken(user, session.Id, minutes: 5);
 
             return Result<RefreshSessionResponse>.Success(new RefreshSessionResponse(jwt));
         }

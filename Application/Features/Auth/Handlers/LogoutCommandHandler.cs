@@ -3,9 +3,6 @@ using Application.Features.Auth.Commands;
 using Domain.Common;
 using Domain.Repositories;
 using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Application.Features.Auth.Handlers
 {
@@ -23,14 +20,13 @@ namespace Application.Features.Auth.Handlers
         public async Task<Result<bool>> Handle(LogoutCommand request, CancellationToken ct)
         {
             if (string.IsNullOrEmpty(request.RefreshToken))
-                return Result<bool>.Success(true); // Ya está deslogueado
+                return Result<bool>.Success(true);
 
-            // Obtener la dupla Token/Sesión
             var (tokenRecord, session) = await _userRepository.GetTokenWithSessionAsync(request.RefreshToken);
 
             if (tokenRecord != null)
             {
-                // Revocar el Refresh Token
+                // Invalidar el token para prevenir su reutilización
                 tokenRecord.IsRevoked = true;
                 tokenRecord.UpdateTimestamp();
                 await _userRepository.UpdateRefreshTokenAsync(tokenRecord);
@@ -38,7 +34,7 @@ namespace Application.Features.Auth.Handlers
 
             if (session != null)
             {
-                // Matar la sesión
+                // Finalizar el estado de la sesión vinculada
                 session.IsActive = false;
                 session.UpdateTimestamp();
                 await _userRepository.UpdateSessionAsync(session);
