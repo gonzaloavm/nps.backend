@@ -1,13 +1,12 @@
-﻿using Application.Features.Votes.Queries;
+﻿using Application.DTOs;
+using Application.Features.Votes.Queries;
+using Domain.Common;
 using Domain.Repositories;
 using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Application.Features.Votes.Handlers
 {
-    public class HasUserVotedQueryHandler : IRequestHandler<HasUserVotedQuery, bool>
+    public class HasUserVotedQueryHandler : IRequestHandler<HasUserVotedQuery, Result<HasVotedResponse>>
     {
         private readonly IVoteRepository _voteRepository;
 
@@ -16,10 +15,10 @@ namespace Application.Features.Votes.Handlers
             _voteRepository = voteRepository;
         }
 
-        public async Task<bool> Handle(HasUserVotedQuery request, CancellationToken cancellationToken)
+        public async Task<Result<HasVotedResponse>> Handle(HasUserVotedQuery request, CancellationToken cancellationToken)
         {
-            var vote = await _voteRepository.GetByUserIdAsync(request.UserId);
-            return vote != null;
+            var vote = await _voteRepository.HasUserVotedAsync(request.UserId);
+            return Result<HasVotedResponse>.Success(new HasVotedResponse(vote));
         }
     }
 }

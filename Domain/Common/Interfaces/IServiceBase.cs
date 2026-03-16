@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Domain.Contracts.Common
+namespace Domain.Common.Interfaces
 {
-    public interface IRepositoryBase {}
+    public interface IServiceBase{}
 }

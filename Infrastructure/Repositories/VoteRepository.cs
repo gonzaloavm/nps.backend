@@ -1,73 +1,50 @@
 ﻿using Dapper;
-using Domain.Entities;
+using Domain.Entities.DTOs;
+using Domain.Entities.VoteAggregate;
 using Domain.Repositories;
-using Infrastructure.Persistence;
-using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Data;
 
 namespace Infrastructure.Repositories
 {
     public class VoteRepository : IVoteRepository
     {
-        private readonly DapperContext _context;
+        private readonly IDbConnection _connection;
 
-        public VoteRepository(DapperContext context)
+        public VoteRepository(IDbConnection connection)
         {
-            _context = context;
+            _connection = connection;
         }
 
-        public async Task AddAsync(Vote vote)
+        public async Task<int> AddAsync(Vote vote)
         {
-            var query = @"
-                INSERT INTO Votes (UserId, Score, VotedAt)
-                VALUES (@UserId, @Score, @VotedAt);
-                SELECT CAST(SCOPE_IDENTITY() as int)";
-            using var connection = _context.CreateConnection();
-            var id = await connection.ExecuteScalarAsync<int>(query, vote);
-            vote.Id = id;
+            const string sql = @"
+            INSERT INTO Votes (UserId, Score, CreatedAt, UpdatedAt)
+            VALUES (@UserId, @Score, @CreatedAt, @UpdatedAt);
+            SELECT CAST(SCOPE_IDENTITY() as int);";
+            return await _connection.ExecuteScalarAsync<int>(sql, vote);
         }
 
-        public async Task<IEnumerable<Vote>> GetAllAsync()
+        public async Task<bool> HasUserVotedAsync(int userId)
         {
-            var query = "SELECT * FROM Votes";
-            using var connection = _context.CreateConnection();
-            return await connection.QueryAsync<Vote>(query);
+            const string sql = "SELECT COUNT(1) FROM Votes WHERE UserId = @userId";
+            var count = await _connection.ExecuteScalarAsync<int>(sql, new { userId });
+            return count > 0;
         }
 
-        public async Task<Vote?> GetByUserIdAsync(int userId)
+        // Este lo usaremos en el siguiente paso para el Admin
+        public async Task<NpsStatisticsDto> GetNpsStatisticsAsync()
         {
-            var query = "SELECT * FROM Votes WHERE UserId = @UserId";
-            using var connection = _context.CreateConnection();
-            return await connection.QuerySingleOrDefaultAsync<Vote>(query, new { UserId = userId });
-        }
+            // Usamos COUNT(CASE...) para categorizar en un solo recorrido de la tabla
+            const string sql = @"
+            SELECT 
+                COUNT(*) AS TotalVotes,
+                COUNT(CASE WHEN Score >= 9 THEN 1 END) AS Promoters,
+                COUNT(CASE WHEN Score <= 6 THEN 1 END) AS Detractors,
+                COUNT(CASE WHEN Score IN (7, 8) THEN 1 END) AS Neutrals
+            FROM Votes";
 
-        public async Task<int> GetDetractorsCountAsync()
-        {
-            var query = "SELECT COUNT(1) FROM Votes WHERE Score <= 6";
-            using var connection = _context.CreateConnection();
-            return await connection.ExecuteScalarAsync<int>(query);
-        }
-
-        public async Task<int> GetNeutralsCountAsync()
-        {
-            var query = "SELECT COUNT(1) FROM Votes WHERE Score = 7 OR Score = 8";
-            using var connection = _context.CreateConnection();
-            return await connection.ExecuteScalarAsync<int>(query);
-        }
-
-        public async Task<int> GetPromotersCountAsync()
-        {
-            var query = "SELECT COUNT(1) FROM Votes WHERE Score >= 9";
-            using var connection = _context.CreateConnection();
-            return await connection.ExecuteScalarAsync<int>(query);
-        }
-
-        public async Task<int> GetTotalVotesAsync()
-        {
-            var query = "SELECT COUNT(1) FROM Votes";
-            using var connection = _context.CreateConnection();
-            return await connection.ExecuteScalarAsync<int>(query);
+            // Dapper mapea las columnas a las propiedades del DTO interno
+            return await _connection.QuerySingleAsync<NpsStatisticsDto>(sql);
         }
     }
 }

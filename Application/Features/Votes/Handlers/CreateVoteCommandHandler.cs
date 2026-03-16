@@ -1,5 +1,8 @@
-﻿using Application.Features.Votes.Commands;
+﻿using Application.DTOs;
+using Application.Features.Votes.Commands;
+using Domain.Common;
 using Domain.Entities;
+using Domain.Entities.VoteAggregate;
 using Domain.Repositories;
 using MediatR;
 using System;
@@ -8,32 +11,36 @@ using System.Text;
 
 namespace Application.Features.Votes.Handlers
 {
-    public class CreateVoteCommandHandler : IRequestHandler<CreateVoteCommand, bool>
+    public class CreateVoteCommandHandler : IRequestHandler<CreateVoteCommand, Result<CreateVoteResponse>>
     {
         private readonly IVoteRepository _voteRepository;
-        private readonly IUserRepository _userRepository;
 
-        public CreateVoteCommandHandler(IVoteRepository voteRepository, IUserRepository userRepository)
+        public CreateVoteCommandHandler(IVoteRepository voteRepository)
         {
             _voteRepository = voteRepository;
-            _userRepository = userRepository;
         }
 
-        public async Task<bool> Handle(CreateVoteCommand request, CancellationToken cancellationToken)
+        public async Task<Result<CreateVoteResponse>> Handle(CreateVoteCommand request, CancellationToken ct)
         {
-            var alreadyVoted = await _voteRepository.GetByUserIdAsync(request.UserId);
-            if (alreadyVoted != null)
-                return false;
+            // Validar escala (0-10) - Podrías usar FluentValidation también
+            if (request.Score < 0 || request.Score > 10)
+                return Result<CreateVoteResponse>.Failure(new Error(BusinessErrorCodes.Generic, "La puntuación debe estar entre 0 y 10."));
 
+            // Validar si ya votó
+            var hasVoted = await _voteRepository.HasUserVotedAsync(request.UserId);
+            if (hasVoted)
+                return Result<CreateVoteResponse>.Failure(new Error(BusinessErrorCodes.Generic, "El usuario ya ha realizado su clasificación."));
+
+            // Guardar en DB
             var vote = new Vote
             {
                 UserId = request.UserId,
-                Score = request.Score,
-                VotedAt = DateTime.UtcNow
+                Score = request.Score
             };
 
-            await _voteRepository.AddAsync(vote);
-            return true;
+            var voteId = await _voteRepository.AddAsync(vote);
+
+            return Result<CreateVoteResponse>.Success(new CreateVoteResponse(voteId));
         }
     }
 }

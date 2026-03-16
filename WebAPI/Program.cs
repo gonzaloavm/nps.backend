@@ -1,18 +1,16 @@
+using Application.Behaviors;
 using Application.Contracts;
 using Application.Features.Auth.Commands;
-using Application.Mappings;
-using Application.Validators;
-using Domain.Contracts.Common;
-using Domain.Repositories;
+using Domain.Common.Interfaces;
 using FluentValidation;
-using FluentValidation.AspNetCore;
 using Infrastructure.Extensions;
 using Infrastructure.Persistence;
-using Infrastructure.Repositories;
 using Infrastructure.Services;
+using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using System.Data;
 using System.Reflection;
 using System.Text;
 using WebAPI.Middleware;
@@ -26,9 +24,9 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 // AutoMapper
-builder.Services.AddAutoMapper(cfg => {
-    cfg.AddProfile<MappingProfile>();
-});
+//builder.Services.AddAutoMapper(cfg => {
+//    cfg.AddProfile<MappingProfile>();
+//});
 
 // Repositorios y servicios
 var infraAssembly = Assembly.Load("Infrastructure");
@@ -39,19 +37,27 @@ builder.Services.AddMappedComponents<IServiceBase>(infraAssembly);
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(LoginCommand).Assembly));
 
 // FluentValidation
-builder.Services.AddFluentValidationAutoValidation();
-builder.Services.AddValidatorsFromAssemblyContaining<LoginValidator>();
+builder.Services.AddMediatR(cfg => {
+    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
+    cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+});
+
+builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
 // Dapper Context
 builder.Services.AddSingleton<DapperContext>();
+builder.Services.AddScoped<IDbConnection>(sp =>
+    sp.GetRequiredService<DapperContext>().CreateConnection());
 
-// Repositories
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IVoteRepository, VoteRepository>();
+// Inicializador DB
+builder.Services.AddScoped<DatabaseInitializer>();
 
-// Services
-builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+// HttpContextAccessor
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITokenService, TokenService>();
+
+// HttpClient
+builder.Services.AddHttpClient();
 
 // Authentication JWT
 var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
@@ -83,7 +89,34 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("VoterOnly", policy => policy.RequireRole("Voter"));
 });
 
+#region CORS
+
+var myAllowSpecificOrigins = "_myAllowSpecificOrigins";
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: myAllowSpecificOrigins,
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:4200")
+                .AllowCredentials()
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
+});
+
+#endregion
+
+#region APP
+
 var app = builder.Build();
+
+
+using (var scope = app.Services.CreateScope())
+{
+    var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
+    await initializer.InitializeAsync();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -95,13 +128,20 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseMiddleware<UserActivityMiddleware>();
+app.UseMiddleware<ExceptionMiddleware>();
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
+
+app.UseCors(myAllowSpecificOrigins);
 
 app.UseAuthentication();
+
+app.UseMiddleware<SessionActivityMiddleware>();
+
 app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
+
+#endregion

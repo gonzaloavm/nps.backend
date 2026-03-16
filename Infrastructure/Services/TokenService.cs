@@ -1,9 +1,8 @@
 ﻿using Application.Contracts;
-using Domain.Entities;
+using Domain.Entities.UserAggregate;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
-using System;
-using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -14,13 +13,15 @@ namespace Infrastructure.Services
     public class TokenService : ITokenService
     {
         private readonly IConfiguration _configuration;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public TokenService(IConfiguration configuration)
+        public TokenService(IConfiguration configuration, IHttpContextAccessor httpContextAccessor)
         {
             _configuration = configuration;
+            _httpContextAccessor = httpContextAccessor;
         }
 
-        public string GenerateToken(User user)
+        public string GenerateToken(User user, int sessionId, int minutes)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]!);
@@ -30,9 +31,10 @@ namespace Infrastructure.Services
                 {
                     new Claim(ClaimTypes.Name, user.Username),
                     new Claim(ClaimTypes.Role, user.Role),
-                    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
+                    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                    new Claim("SessionId", sessionId.ToString())
                 }),
-                Expires = DateTime.UtcNow.AddMinutes(5), // Sesión de 5 minutos
+                Expires = DateTime.UtcNow.AddMinutes(minutes), // Sesión de minutos definidos
                 Issuer = _configuration["Jwt:Issuer"],
                 Audience = _configuration["Jwt:Audience"],
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
@@ -49,28 +51,18 @@ namespace Infrastructure.Services
             return Convert.ToBase64String(randomNumber);
         }
 
-        public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
+        public void SetRefreshTokenCookie(string token)
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]!);
-            try
+            var cookieOptions = new CookieOptions
             {
-                var principal = tokenHandler.ValidateToken(token, new TokenValidationParameters
-                {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(key),
-                    ValidateIssuer = true,
-                    ValidIssuer = _configuration["Jwt:Issuer"],
-                    ValidateAudience = true,
-                    ValidAudience = _configuration["Jwt:Audience"],
-                    ValidateLifetime = false // No validar expiración para refresh
-                }, out var validatedToken);
-                return principal;
-            }
-            catch
-            {
-                return null;
-            }
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Expires = DateTime.Now.AddMinutes(5)
+            };
+
+            // Accedemos al Response a través del Accessor
+            _httpContextAccessor.HttpContext?.Response.Cookies.Append("refreshToken", token, cookieOptions);
         }
     }
 }

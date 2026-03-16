@@ -4,5 +4,5 @@ using System.Text;
 
 namespace Application.DTOs
 {
-    public record VoteDto(int Score);
+    public record LoginRequest(string Username, string Password);
 }

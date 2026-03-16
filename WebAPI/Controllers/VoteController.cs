@@ -1,10 +1,12 @@
 ﻿using Application.DTOs;
 using Application.Features.Votes.Commands;
 using Application.Features.Votes.Queries;
-using Application.Validators;
+using Domain.Common;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using WebAPI.Common;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -22,32 +24,51 @@ namespace WebAPI.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> CreateVote([FromBody] VoteDto voteDto)
+        [Authorize (Policy = "VoterOnly")]
+        [ProducesResponseType(typeof(ApiResponse<CreateVoteResponse>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> CreateVote([FromBody] CreateVoteRequest request, CancellationToken ct)
         {
-            var validator = new VoteValidator();
-            var validationResult = await validator.ValidateAsync(voteDto);
-            if (!validationResult.IsValid)
-                return BadRequest(validationResult.Errors);
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-            var hasVoted = await _mediator.Send(new HasUserVotedQuery (userId));
-            if (hasVoted)
-                return BadRequest(new { message = "User has already voted." });
+            if (!int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(ProblemDetailsMapper.ToProblemDetails(new[] { new Error(BusinessErrorCodes.Generic, "Usuario no identificado.") }, StatusCodes.Status401Unauthorized, "Unauthorized"));
+            }
 
-            var command = new CreateVoteCommand (userId, voteDto.Score);
-            var result = await _mediator.Send(command);
-            if (result)
-                return Ok(new { message = "Vote registered successfully." });
-            else
-                return BadRequest(new { message = "Unable to register vote." });
+            var command = new CreateVoteCommand(userId, request.Score);
+            var result = await _mediator.Send(command, ct);
+
+            if (!result.IsSuccess)
+            {
+                return BadRequest(ProblemDetailsMapper.ToProblemDetails(result.Errors, StatusCodes.Status400BadRequest, "Bad Request"));
+            }
+
+            return Ok(ApiResponse<CreateVoteResponse>.Ok(result.Value));
         }
 
         [HttpGet("has-voted")]
+        [Authorize(Policy = "VoterOnly")]
+        [ProducesResponseType(typeof(ApiResponse<HasVotedResponse>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> HasVoted()
         {
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-            var hasVoted = await _mediator.Send(new HasUserVotedQuery (userId));
-            return Ok(new { hasVoted });
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(ProblemDetailsMapper.ToProblemDetails(new[] { new Error(BusinessErrorCodes.Generic, "Usuario no identificado.", "userId") }, StatusCodes.Status401Unauthorized, "Unauthorized"));
+            }
+
+            var result = await _mediator.Send(new HasUserVotedQuery(userId));
+
+            if (!result.IsSuccess)
+            {
+                return BadRequest(ProblemDetailsMapper.ToProblemDetails(result.Errors, StatusCodes.Status400BadRequest, "Bad Request"));
+            }
+
+            return Ok(ApiResponse<HasVotedResponse>.Ok(result.Value));
         }
     }
 }

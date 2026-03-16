@@ -1,8 +1,13 @@
-﻿using Application.DTOs;
+﻿using Application.Contracts;
+using Application.DTOs;
 using Application.Features.Auth.Commands;
 using Application.Validators;
+using Domain.Common;
+using Infrastructure.Services;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WebAPI.Common;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
@@ -20,29 +25,132 @@ namespace WebAPI.Controllers
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
+        [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> Login(
+            [FromBody] LoginRequest loginDto,
+            [FromServices] IDeviceInfoService deviceInfoService,
+            [FromServices] IGeoLocationService geoService,
+            CancellationToken cancellationToken)
         {
-            var validator = new LoginValidator();
-            var validationResult = await validator.ValidateAsync(loginDto);
-            if (!validationResult.IsValid)
-                return BadRequest(validationResult.Errors);
+            var ip = deviceInfoService.GetIpAddress();
+            var device = deviceInfoService.GetDeviceName();
+            var location = await geoService.GetLocationAsync(ip, cancellationToken);
 
-            var command = new LoginCommand (loginDto.Username, loginDto.Password);
+            var command = new LoginCommand(loginDto.Username, loginDto.Password, ip, device, location);
             var result = await _mediator.Send(command);
 
-            if (result == null)
-                return Unauthorized(new { message = "Invalid credentials or account locked." });
+            if (!result.IsSuccess)
+            {
+                if (result.Errors.Any(e => e.Code == "Unauthorized" || e.Code == "InvalidCredentials"))
+                {
+                    return Unauthorized(ProblemDetailsMapper.ToProblemDetails(result.Errors, StatusCodes.Status401Unauthorized, "Unauthorized"));
+                }
 
-            return Ok(result);
+                return BadRequest(ProblemDetailsMapper.ToProblemDetails(result.Errors, StatusCodes.Status400BadRequest, "Bad Request"));
+            }
+
+            return Ok(ApiResponse<LoginResponse>.Ok(result.Value));
         }
 
-        [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh([FromBody] RefreshTokenCommand command)
+        [HttpPost("register")]
+        [Authorize(Policy = "AdminOnly")]
+        [ProducesResponseType(typeof(ApiResponse<RegisterResponse>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> Register(
+            [FromBody] RegisterRequest request,
+            CancellationToken cancellationToken)
         {
+            var command = new RegisterCommand(request.Username, request.Password, request.Role);
+
             var result = await _mediator.Send(command);
-            if (result == null)
-                return Unauthorized(new { message = "Invalid refresh token." });
-            return Ok(result);
+
+            if (!result.IsSuccess)
+            {
+                return BadRequest(ProblemDetailsMapper.ToProblemDetails(result.Errors, StatusCodes.Status400BadRequest, "Bad Request"));
+            }
+
+            return Ok(ApiResponse<RegisterResponse>.Ok(result.Value));
+        }
+
+
+        [HttpPost("refresh")]
+        [ProducesResponseType(typeof(ApiResponse<RefreshSessionResponse>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> RefreshSession(
+            [FromServices] IDeviceInfoService deviceInfoService,
+            CancellationToken cancellationToken)
+        {
+            // Extraemos el refresh token de la cookie
+            if (!Request.Cookies.TryGetValue("refreshToken", out var refreshToken))
+            {
+                var missing = new[] { new Error("MissingRefreshToken", "No hay refresh token.", "refreshToken") };
+                return Unauthorized(ProblemDetailsMapper.ToProblemDetails(missing, StatusCodes.Status401Unauthorized, "Unauthorized"));
+            }
+
+            var ip = deviceInfoService.GetIpAddress();
+
+            var command = new RefreshTokenCommand(refreshToken, ip);
+
+            var result = await _mediator.Send(command);
+
+            if (!result.IsSuccess)
+            {
+                if (result.Errors.Any(e => e.Code == "InvalidRefreshToken" || e.Code == "ExpiredRefreshToken"))
+                {
+                    return Unauthorized(ProblemDetailsMapper.ToProblemDetails(result.Errors, StatusCodes.Status401Unauthorized, "Unauthorized"));
+                }
+
+                return BadRequest(ProblemDetailsMapper.ToProblemDetails(result.Errors, StatusCodes.Status400BadRequest, "Bad Request"));
+            }
+
+            return Ok(ApiResponse<RefreshSessionResponse>.Ok(result.Value));
+        }
+
+
+        [HttpPost("logout")]
+        [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> Logout(CancellationToken cancellationToken)
+        {
+            if (Request.Cookies.TryGetValue("refreshToken", out var refreshToken))
+            {
+                var command = new LogoutCommand(refreshToken);
+                var result = await _mediator.Send(command, cancellationToken);
+
+                if (!result.IsSuccess)
+                {
+                    return BadRequest(ProblemDetailsMapper.ToProblemDetails(result.Errors, StatusCodes.Status400BadRequest, "Bad Request"));
+                }
+            }
+
+            // Limpiar la cookie del lado del cliente (Navegador)
+            Response.Cookies.Delete("refreshToken", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/"
+            });
+
+            return Ok(ApiResponse<bool>.Ok(true));
+        }
+
+        /// <summary>
+        /// Este endpoint al ser llamado, hace que el Middleware actualice el LastActivityAt de la sesión.
+        /// El parámetro 't' se usa para evitar el caché del navegador.
+        /// </summary>
+        [HttpGet("verify-session")]
+        [Authorize]
+        public async Task<IActionResult> VerifySession([FromQuery] long? t = null)
+        {
+            // El parámetro 't' no se usa aquí, su sola presencia en la URL 
+            // obliga al navegador a realizar una petición real al servidor.
+            return Ok(ApiResponse<bool>.Ok(true));
         }
     }
 }

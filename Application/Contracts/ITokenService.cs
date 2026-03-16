@@ -1,5 +1,5 @@
-﻿using Domain.Contracts.Common;
-using Domain.Entities;
+﻿using Domain.Common.Interfaces;
+using Domain.Entities.UserAggregate;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
@@ -9,8 +9,9 @@ namespace Application.Contracts
 {
     public interface ITokenService : IServiceBase
     {
-        string GenerateToken(User user);
+        string GenerateToken(User user, int sessionId, int minutes);
         string GenerateRefreshToken();
-        ClaimsPrincipal? GetPrincipalFromExpiredToken(string token);
+        void SetRefreshTokenCookie(string token);
+
     }
 }

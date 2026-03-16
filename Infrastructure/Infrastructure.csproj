@@ -15,4 +15,8 @@
     <ProjectReference Include="..\Application\Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Persistence\Scripts\InitDatabase.sql" />
+  </ItemGroup>
+
 </Project>

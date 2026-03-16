@@ -1,4 +1,4 @@
-﻿using Domain.Contracts.Common;
+﻿using Domain.Common.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Text;

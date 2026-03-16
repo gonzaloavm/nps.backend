@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Domain.Contracts.Common
+namespace Application.DTOs
 {
-    public interface IServiceBase{}
+    public record CreateVoteRequest(int Score);
 }
