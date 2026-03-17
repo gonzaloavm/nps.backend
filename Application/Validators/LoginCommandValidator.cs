@@ -10,14 +10,14 @@ namespace Application.Validators
         {
             RuleFor(x => x.Username)
                 .NotEmpty().WithMessage("El nombre de usuario es obligatorio.")
-                .MinimumLength(3).WithMessage("El usuario debe tener al menos 3 caracteres.")
-                .MaximumLength(50).WithMessage("El nombre de usuario no puede exceder los 50 caracteres.")
+                .MinimumLength(3).WithMessage("El nombre de usuario es muy corto.")
+                .MaximumLength(50).WithMessage("El nombre de usuario es muy largo.")
                 .Must(u => !u.Contains(" ")).WithMessage("El nombre de usuario no puede contener espacios.");
 
             RuleFor(x => x.Password)
                 .NotEmpty().WithMessage("La contraseña es obligatoria.")
-                .MinimumLength(6).WithMessage("La contraseña debe tener al menos 6 caracteres.")
-                .MaximumLength(100).WithMessage("La contraseña no puede exceder los 100 caracteres.")
+                .MinimumLength(6).WithMessage("La contraseña es muy corta.")
+                .MaximumLength(100).WithMessage("La contraseña es muy larga.")
                 .Must(p => !p.Contains(" ")).WithMessage("La contraseña no puede contener espacios.");
 
             RuleFor(x => x.Ip)
